@@ -14,7 +14,7 @@ import appCss from "../styles.css?url";
 import { AuthProvider } from "../context/AuthContext";
 import { ThemeProvider, themeInitScript } from "../context/ThemeContext";
 import { Toaster } from "../components/ui/sonner";
-import { reportLovableError } from "../lib/lovable-error-reporting";
+import { reportError } from "../lib/error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -42,7 +42,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -86,8 +86,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "Rateify — Store ratings" },
       { property: "og:description", content: "Discover and rate stores, track feedback and manage your platform." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:card", content: "summary_large_image" }
     ],
     links: [
       {
