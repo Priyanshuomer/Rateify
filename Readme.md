@@ -77,7 +77,7 @@ store-rating-platform/
 │       ├── services/            # business logic
 │       ├── controllers/         # HTTP handlers
 │       └── routes/              # route definitions
-└── ratify/                      # frontend
+└── client/                      # frontend
     └── src/
         ├── api/                 # axios client + endpoint functions
         ├── components/          # common, layout, stores, address, profile, ui (shadcn)
@@ -176,7 +176,7 @@ ADMIN_EMAIL="admin@example.com"
 ADMIN_PASSWORD="Admin@12345"
 ```
 
-### `ratify/.env`
+### `client/.env`
 ```env
 VITE_API_BASE_URL=http://localhost:3000/api
 ```
