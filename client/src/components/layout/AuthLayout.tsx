@@ -17,7 +17,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
             Discover great local shops, share your experience, and help owners do better — one star at a time.
           </p>
         </div>
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
@@ -38,7 +38,7 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
         >
           <Star className="h-5 w-5 fill-star text-star" />
           <span className="text-sm font-medium">12,480 ratings this month</span>
-        </motion.div>
+        </motion.div> */}
         <p className="relative z-10 text-xs text-primary-foreground/60">© {new Date().getFullYear()} Rateify</p>
       </aside>
       <main className="flex items-center justify-center bg-background px-4 py-10 sm:px-8">
