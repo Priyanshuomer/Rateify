@@ -1,0 +1,272 @@
+// server/prisma/schema.prisma
+// Store Rating Platform - PostgreSQL + Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── ENUMS ───────────────────────────
+
+enum Role {
+  ADMIN
+  USER
+  OWNER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum StoreStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+  SUSPENDED
+}
+
+enum AddressType {
+  HOME
+  WORK
+  STORE
+  OTHER
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+// ─────────────────────────── USER ───────────────────────────
+
+model User {
+  id String @id @default(cuid())
+
+  // Identity
+  firstName  String
+  middleName String?
+  lastName   String?
+  fullName   String // denormalized (first + middle + last) for sorting/filtering; 20-60 chars validated in app layer
+
+  email           String    @unique
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  phone           String?   @unique
+
+  // Auth
+  passwordHash      String? // nullable: Google accounts have no password until they set one
+  passwordChangedAt DateTime?
+  authProvider      AuthProvider  @default(LOCAL)
+  providerId        String?       @unique // Google profile id
+  role              Role          @default(USER)
+  status            AccountStatus @default(ACTIVE)
+  failedLoginCount  Int           @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+
+  // Profile
+  dob               DateTime?
+  gender            Gender?
+  bio               String?
+  profilePictureKey String? // storage key (R2 object key)
+  profilePictureUrl String?
+
+  // Relations
+  addresses      Address[]
+  ownedStores    Store[]              @relation("StoreOwner")
+  ratings        Rating[]
+  refreshTokens  RefreshToken[]
+  passwordResets PasswordResetToken[]
+  auditLogs      AuditLog[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  @@index([role])
+  @@index([status])
+  @@index([fullName])
+  @@index([createdAt])
+  @@map("users")
+}
+
+// ─────────────────────────── ADDRESS ───────────────────────────
+
+model Address {
+  id         String      @id @default(cuid())
+  entityType Role? // ADMIN / USER / OWNER (when the address belongs to a user)
+  type       AddressType @default(HOME)
+
+  // Single-line address (max 400 chars enforced in app layer) - used for listing/filter/search
+  fullAddress String?
+
+  flatNo   String?
+  street   String?
+  landmark String?
+  village  String?
+  city     String?
+  state    String?
+  country  String? @default("India")
+  pinCode  String?
+
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+
+  isPrimary Boolean @default(false)
+
+  // Polymorphic-style relations (only one populated)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([entityType])
+  @@index([userId])
+  @@index([storeId])
+  @@index([city])
+  @@index([pinCode])
+  @@map("addresses")
+}
+
+// ─────────────────────────── STORE ───────────────────────────
+
+model Store {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  email       String      @unique
+  phone       String?
+  description String?
+  category    String?
+  status      StoreStatus @default(ACTIVE)
+
+  // Media
+  logoKey   String?
+  logoUrl   String?
+  bannerKey String?
+  bannerUrl String?
+
+  // Denormalized rating aggregates (kept in sync inside the rating transaction)
+  averageRating Decimal @default(0) @db.Decimal(3, 2)
+  ratingCount   Int     @default(0)
+
+  // Relations
+  ownerId   String
+  owner     User      @relation("StoreOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  addresses Address[]
+  ratings   Rating[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([ownerId])
+  @@index([name])
+  @@index([status])
+  @@index([averageRating])
+  @@index([createdAt])
+  @@map("stores")
+}
+
+// ─────────────────────────── RATING ───────────────────────────
+
+// Add this CHECK constraint to the generated migration.sql (Prisma can't express it):
+//   ALTER TABLE "ratings" ADD CONSTRAINT "ratings_value_range" CHECK ("value" BETWEEN 1 AND 5);
+
+model Rating {
+  id      String  @id @default(cuid())
+  value   Int // 1 - 5
+  comment String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One rating per user per store (submit once, then modify)
+  @@unique([userId, storeId])
+  @@index([storeId])
+  @@index([userId])
+  @@index([value])
+  @@map("ratings")
+}
+
+// ─────────────────────────── AUTH SUPPORT ───────────────────────────
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// ─────────────────────────── AUDIT ───────────────────────────
+
+model AuditLog {
+  id         String  @id @default(cuid())
+  action     String // e.g. USER_CREATED, STORE_CREATED, RATING_UPDATED, PASSWORD_CHANGED
+  entityType String? // User | Store | Rating
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
